@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Evidence Generator</title>
+    <style>
+        /* if it works, leave it alone */
+        body { margin: 0; background-color: #f0f2f5; font-family: 'Comic Sans MS', 'Segoe UI', sans-serif; color: #333; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Layout: Top Canvas, Bottom Storyboard */
+        #main-container { display: flex; flex: 1; position: relative; overflow: hidden; }
+        #canvas-container { flex: 1; background: #ddd; position: relative; }
+        
+        /* Dashboard Overlay */
+        #dashboard {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            border: 1px solid #ddd;
+            z-index: 10;
+        }
+        
+        h1 { margin: 0 0 15px 0; font-size: 18px; color: #0055bb; text-transform: uppercase; border-bottom: 2px solid #0055bb; padding-bottom: 10px; }
+        
+        select { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-weight: bold; margin-bottom: 15px; cursor: pointer; }
+        
+        .btn-action {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s, opacity 0.2s;
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        #btn-run { background: #28a745; }
+        #btn-run:hover { background: #218838; }
+        #btn-run:disabled { background: #ccc; cursor: not-allowed; }
+
+        #btn-save { background: #0055bb; opacity: 0.5; cursor: not-allowed; }
+        #btn-save.active { opacity: 1; cursor: pointer; }
+        #btn-save.active:hover { background: #004494; }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            margin-bottom: 10px;
+            color: #555;
+        }
+        .checkbox-row input { margin-right: 8px; cursor: pointer; }
+        .checkbox-row label { cursor: pointer; }
+
+        .status-badge {
+            text-align: center;
+            padding: 8px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-top: 10px;
+            background: #e9ecef; color: #555;
+        }
+
+        /* Storyboard Strip */
+        #storyboard-strip {
+            height: 220px;
+            background: #fff;
+            border-top: 1px solid #ccc;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.05);
+        }
+        
+        .frame-card {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            width: 250px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+        }
+        .frame-card img {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            border: 1px solid #eee;
+            background: #f0f2f5;
+            border-radius: 4px;
+        }
+        .caption {
+            font-size: 12px;
+            color: #555;
+            margin-top: 8px;
+            font-weight: 600;
+        }
+        .timestamp {
+            font-size: 10px;
+            color: #999;
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        #overlay-msg {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 50px;
+            font-size: 24px;
+            font-weight: bold;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 20;
+        }
+
+    </style>
+    <!-- Load Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="main-container">
+        <div id="dashboard">
+            <h1>The Evidence Generator</h1>
+            <label style="font-size: 12px; font-weight: bold; color: #555;">Choose Your Disaster:</label>
+            <select id="scenario-select">
+                <option value="stable">1. Boring (Stable)</option>
+                <option value="gust">2. Bumpy (Windy)</option>
+                <option value="unstable">3. Broken (Unstable)</option>
+            </select>
+
+            <button id="btn-run" class="btn-action">Make It Happen</button>
+            
+            <div class="checkbox-row">
+                <input type="checkbox" id="chk-clean" checked>
+                <label for="chk-clean">No Words, Just Vibes (Clean Image)</label>
+            </div>
+            
+            <button id="btn-save" class="btn-action" disabled>Download The Proof</button>
+            
+            <div id="status-display" class="status-badge">WAITING...</div>
+            
+            <div style="font-size: 11px; color: #888; margin-top: 15px; line-height: 1.4;">
+                *Do math<br>
+                *Take pics<br>
+                *Profit
+            </div>
+        </div>
+        
+        <div id="overlay-msg">DOING SCIENCE...</div>
+        <div id="canvas-container"></div>
+    </div>
+
+    <div id="storyboard-strip">
+        <div style="color: #ccc; font-style: italic;">Push the green button...</div>
+    </div>
+
+<script>
+    // --- 1. THREE.JS SETUP ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf0f2f5);
+    scene.fog = new THREE.Fog(0xf0f2f5, 5, 20);
+
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
+    camera.position.set(0.935, 3.5, 0); 
+    camera.lookAt(0.935, 0, 0);
+
+    // IMPORTANT: preserveDrawingBuffer required for snapshots
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0.935, 0, 0);
+    controls.enableDamping = true;
+
+    // --- 2. OBJECTS ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 10, 5);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    const gridHelper = new THREE.GridHelper(10, 10, 0xbbbbbb, 0xdddddd);
+    scene.add(gridHelper);
+
+    // Spear Group
+    const spearAnchor = new THREE.Group();
+    spearAnchor.position.set(0.935, 0, 0);
+    scene.add(spearAnchor);
+    
+    const spearMeshGroup = new THREE.Group();
+    spearMeshGroup.position.set(-0.935, 0, 0);
+    spearAnchor.add(spearMeshGroup);
+
+    // Materials
+    const matWood = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+    const matRubber = new THREE.MeshStandardMaterial({ color: 0x222222 });
+    const matObsidian = new THREE.MeshStandardMaterial({ color: 0x111111 });
+
+    // Build Spear
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 2.1, 32).rotateZ(-Math.PI/2).translate(1.05,0,0), matWood);
+    spearMeshGroup.add(shaft);
+    
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.1, 32).rotateZ(-Math.PI/2).translate(0.55,0,0), matRubber);
+    spearMeshGroup.add(grip);
+    
+    const headGeo = new THREE.BufferGeometry();
+    const v_tip=[2.2,0,0], v_bl=[2.1,-0.005,-0.02], v_br=[2.1,0.005,-0.02], v_tr=[2.1,0.005,0.02], v_tl=[2.1,-0.005,0.02];
+    const verts = new Float32Array([...v_bl,...v_br,...v_tr, ...v_bl,...v_tr,...v_tl, ...v_tip,...v_br,...v_bl, ...v_tip,...v_tr,...v_br, ...v_tip,...v_tl,...v_tr, ...v_tip,...v_bl,...v_tl]);
+    headGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    headGeo.computeVertexNormals();
+    spearMeshGroup.add(new THREE.Mesh(headGeo, matObsidian));
+
+    // Fin (Dynamic Size based on stable state)
+    const finGroup = new THREE.Group();
+    spearMeshGroup.add(finGroup);
+    
+    function createFin(scaleFactor) {
+        // Clear old fin
+        while(finGroup.children.length > 0){ 
+            finGroup.remove(finGroup.children[0]); 
+        }
+        
+        const finShape = new THREE.Shape();
+        const steps=20; const max_t=1.195; const scale=0.06 * scaleFactor; 
+        finShape.moveTo(5*scale, 0);
+        for(let i=1; i<=steps; i++){ let t=(i/steps)*max_t; finShape.lineTo((5-t*t)*scale, t*scale); }
+        for(let i=steps; i>=0; i--){ let t=(i/steps)*max_t; finShape.lineTo((4-0.3*t*t)*scale, t*scale); }
+        
+        const finGeo = new THREE.ExtrudeGeometry(finShape, { steps:1, depth:0.002, bevelEnabled:false });
+        finGeo.translate(0,0,-0.001);
+        finGeo.translate((1.85-0.27), 0.011, 0);
+        finGroup.add(new THREE.Mesh(finGeo, matWood));
+    }
+    createFin(1.0); 
+
+    // Force Arrows
+    const arrowDir = new THREE.Vector3(0,0,1);
+    const finArrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(1.85-0.935,0,0), 1, 0x0055bb, 0.1, 0.05);
+    const tipArrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(2.15-0.935,0,0), 0.5, 0xd63384, 0.1, 0.05);
+    spearAnchor.add(finArrow);
+    spearAnchor.add(tipArrow);
+    
+    // Pivot Marker
+    spearAnchor.add(new THREE.Mesh(new THREE.SphereGeometry(0.04), new THREE.MeshBasicMaterial({color:0x00ffff})));
+
+    // --- 3. PHYSICS CONSTANTS ---
+    const ARM_FIN = 0.92;
+    const ARM_TIP = 1.21;
+    const INERTIA = 0.375;
+    const DAMPING = 0.96;
+    
+    // Variables
+    let angle = 0;
+    let velocity = 0;
+    let frameCount = 0;
+    
+    // Data Store for Saving
+    let evidenceData = []; 
+    
+    // Scenario Config
+    let config = {
+        areaFin: 20,
+        areaTip: 4,
+        gusts: false,
+        initAngle: 15
+    };
+
+    // --- 4. SIMULATION LOOP ---
+    
+    function resetSim(scenario) {
+        // Reset Logic
+        frameCount = 0;
+        velocity = 0;
+        evidenceData = []; // Clear evidence buffer
+        
+        // Reset UI buttons
+        document.getElementById('btn-save').disabled = true;
+        document.getElementById('btn-save').classList.remove('active');
+        
+        if (scenario === 'stable') {
+            config = { areaFin: 20, areaTip: 4, gusts: false, initAngle: 15 };
+            createFin(1.0);
+            document.getElementById('status-display').innerText = "MODE: BORING";
+            document.getElementById('status-display').style.background = "#d4edda";
+            document.getElementById('status-display').style.color = "#155724";
+        } else if (scenario === 'gust') {
+            config = { areaFin: 20, areaTip: 4, gusts: true, initAngle: 0 };
+            createFin(1.0);
+            document.getElementById('status-display').innerText = "MODE: BUMPY";
+            document.getElementById('status-display').style.background = "#fff3cd";
+            document.getElementById('status-display').style.color = "#856404";
+        } else if (scenario === 'unstable') {
+            config = { areaFin: 3, areaTip: 4, gusts: false, initAngle: 5 };
+            createFin(0.4); 
+            document.getElementById('status-display').innerText = "MODE: BROKEN";
+            document.getElementById('status-display').style.background = "#f8d7da";
+            document.getElementById('status-display').style.color = "#721c24";
+        }
+        
+        angle = config.initAngle;
+        updateVisuals();
+    }
+
+    function updateVisuals() {
+        spearAnchor.rotation.y = THREE.MathUtils.degToRad(-angle);
+        
+        const forceFin = Math.abs(angle) * config.areaFin * 0.1;
+        const forceTip = Math.abs(angle) * config.areaTip * 0.1;
+        const dir = angle >= 0 ? -1 : 1;
+        
+        finArrow.setLength(Math.max(0.001, forceFin * 0.1));
+        finArrow.setDirection(new THREE.Vector3(0,0,dir));
+        tipArrow.setLength(Math.max(0.001, forceTip * 0.1));
+        tipArrow.setDirection(new THREE.Vector3(0,0,dir));
+    }
+
+    function stepPhysics() {
+        const fFin = Math.abs(angle) * config.areaFin * 0.1;
+        const fTip = Math.abs(angle) * config.areaTip * 0.1;
+        
+        const tFin = -1 * Math.sign(angle) * fFin * ARM_FIN;
+        const tTip = Math.sign(angle) * fTip * ARM_TIP;
+        
+        let netT = tFin + tTip;
+        
+        if (config.gusts) {
+            if (Math.random() > 0.9) {
+                netT += (Math.random() - 0.5) * 5; 
+            }
+        }
+        
+        velocity += (netT / INERTIA) * (1/60);
+        velocity *= DAMPING;
+        angle += velocity;
+        
+        updateVisuals();
+    }
+
+    // 5. STORYBOARD LOGIC 
+    
+    function captureFrame(caption, timeLabel) {
+        renderer.render(scene, camera); 
+        const dataURL = renderer.domElement.toDataURL('image/png', 1.0);
+        
+        // Store for Export
+        evidenceData.push({
+            img: dataURL,
+            caption: caption,
+            time: timeLabel
+        });
+        
+        // Render to DOM
+        const card = document.createElement('div');
+        card.className = 'frame-card';
+        card.innerHTML = `
+            <span class="timestamp">${timeLabel}</span>
+            <img src="${dataURL}" />
+            <div class="caption">${caption}</div>
+        `;
+        return card;
+    }
+
+    async function runScenario() {
+        const sel = document.getElementById('scenario-select').value;
+        const strip = document.getElementById('storyboard-strip');
+        const btnRun = document.getElementById('btn-run');
+        const btnSave = document.getElementById('btn-save');
+        const overlay = document.getElementById('overlay-msg');
+        
+        btnRun.disabled = true;
+        btnSave.disabled = true;
+        btnSave.classList.remove('active');
+        strip.innerHTML = '';
+        overlay.style.opacity = 1;
+        
+        resetSim(sel);
+        
+        let captures = [];
+        if (sel === 'stable') {
+            captures = [
+                { f: 0, t: "t=0s (Start)", c: "Offset: 15°. Blue arrow says 'No'." },
+                { f: 40, t: "t=0.7s (Swing)", c: "Spear swings back. Fast." },
+                { f: 120, t: "t=2.0s (Done)", c: "Stopped moving. Borrrring." }
+            ];
+        } else if (sel === 'gust') {
+            captures = [
+                { f: 0, t: "t=0s (Chill)", c: "Nothing happening." },
+                { f: 45, t: "t=0.8s (Hit)", c: "Wind hit it. Ouch." },
+                { f: 90, t: "t=1.5s (Fixed)", c: "Fin fixed it. Good fin." }
+            ];
+            config.gusts = false; 
+        } else if (sel === 'unstable') {
+            captures = [
+                { f: 0, t: "t=0s (Start)", c: "Offset 5°. Fin looks sad." },
+                { f: 60, t: "t=1.0s (Uh Oh)", c: "Pink arrow winning. Bad news." },
+                { f: 120, t: "t=2.0s (RIP)", c: "Spear is sideways. Game over." }
+            ];
+        }
+
+        const maxFrames = 150;
+        for (let i = 0; i <= maxFrames; i++) {
+            if (sel === 'gust' && i === 30) velocity += 2.0; 
+            
+            stepPhysics();
+            
+            const cap = captures.find(c => c.f === i);
+            if (cap) {
+                const card = captureFrame(cap.c, cap.t);
+                strip.appendChild(card);
+            }
+            
+            await new Promise(r => setTimeout(r, 16));
+            renderer.render(scene, camera);
+        }
+        
+        overlay.style.opacity = 0;
+        btnRun.disabled = false;
+        btnSave.disabled = false;
+        btnSave.classList.add('active');
+    }
+
+    // --- 6. SAVE IMAGE LOGIC ---
+    function saveEvidence() {
+        if (evidenceData.length === 0) return;
+
+        const isClean = document.getElementById('chk-clean').checked;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Dimensions
+        // We use the full resolution of the captured screenshots
+        // For 'clean' mode, we stitch them horizontally
+        
+        // Assuming all images have same aspect ratio (they do, from same canvas)
+        const sampleImg = new Image();
+        sampleImg.src = evidenceData[0].img;
+        
+        sampleImg.onload = () => {
+            const w = sampleImg.width;
+            const h = sampleImg.height;
+            
+            if (isClean) {
+                // Clean Mode: Just 3 images side-by-side, no padding, no text
+                canvas.width = w * evidenceData.length;
+                canvas.height = h;
+                
+                // Draw Loop
+                let loadedCount = 0;
+                evidenceData.forEach((item, index) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        ctx.drawImage(img, index * w, 0);
+                        loadedCount++;
+                        if (loadedCount === evidenceData.length) triggerDownload(canvas);
+                    };
+                    img.src = item.img;
+                });
+
+            } else {
+                // Report Mode: Headers, Text, Padding
+                const padding = 20;
+                const headerHeight = 60;
+                const displayWidth = 400; // Resize for report layout readability
+                const displayHeight = (h / w) * displayWidth;
+                const textHeight = 80;
+                
+                const totalWidth = (displayWidth * evidenceData.length) + (padding * (evidenceData.length + 1));
+                const totalHeight = headerHeight + displayHeight + textHeight + padding;
+                
+                canvas.width = totalWidth;
+                canvas.height = totalHeight;
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, totalWidth, totalHeight);
+                
+                // Header
+                ctx.fillStyle = '#0055bb';
+                ctx.fillRect(0, 0, totalWidth, 6);
+                
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 24px Segoe UI, sans-serif';
+                const scenarioName = document.getElementById('scenario-select').options[document.getElementById('scenario-select').selectedIndex].text;
+                ctx.fillText("OFFICIAL REPORT: " + scenarioName, padding, 45);
+                
+                ctx.font = '14px Segoe UI, sans-serif';
+                ctx.fillStyle = '#666';
+                ctx.fillText(new Date().toLocaleString(), totalWidth - 200, 45);
+                
+                let loadedCount = 0;
+                evidenceData.forEach((item, index) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const x = padding + (index * (displayWidth + padding));
+                        const y = headerHeight;
+                        
+                        ctx.drawImage(img, x, y, displayWidth, displayHeight);
+                        ctx.strokeStyle = '#ddd';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x, y, displayWidth, displayHeight);
+                        
+                        ctx.fillStyle = '#888';
+                        ctx.font = 'bold 14px Consolas, monospace';
+                        ctx.fillText(item.time, x, y + displayHeight + 25);
+                        
+                        ctx.fillStyle = '#333';
+                        ctx.font = '16px Segoe UI, sans-serif';
+                        ctx.fillText(item.caption, x, y + displayHeight + 50);
+                        
+                        loadedCount++;
+                        if (loadedCount === evidenceData.length) triggerDownload(canvas);
+                    };
+                    img.src = item.img;
+                });
+            }
+        };
+    }
+    
+    function triggerDownload(canvas) {
+        const link = document.createElement('a');
+        const sel = document.getElementById('scenario-select').value;
+        const isClean = document.getElementById('chk-clean').checked;
+        const suffix = isClean ? "_vibes" : "_proof";
+        
+        link.download = `spear_stability_${sel}${suffix}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    document.getElementById('btn-run').addEventListener('click', runScenario);
+    document.getElementById('btn-save').addEventListener('click', saveEvidence);
+
+    // Initial Render
+    resetSim('stable');
+    renderer.render(scene, camera);
+
+    // Resize Handler
+    window.addEventListener('resize', () => {
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w/h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+        renderer.render(scene, camera);
+    });
+
+</script>
+</body>
+</html>

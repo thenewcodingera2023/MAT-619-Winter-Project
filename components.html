@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spear Parts Bin</title>
+    <style>
+        /* CSS: Coloring with words */
+        body { margin: 0; background-color: #f4f4f9; font-family: 'Comic Sans MS', 'Segoe UI', sans-serif; color: #333; overflow: hidden; }
+        
+        #layout { display: flex; height: 100vh; }
+        
+        /* Sidebar Controls */
+        #sidebar {
+            width: 320px;
+            background: #ffffff;
+            border-right: 1px solid #ddd;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+        
+        h1 { margin: 0 0 5px 0; font-size: 20px; color: #2c3e50; text-transform: uppercase; letter-spacing: 1px; }
+        h2 { margin: 0 0 20px 0; font-size: 12px; color: #7f8c8d; font-weight: normal; }
+        
+        .section-label { font-size: 11px; font-weight: bold; color: #95a5a6; text-transform: uppercase; margin-bottom: 8px; margin-top: 20px; }
+        
+        /* Component Buttons */
+        .comp-btn {
+            display: flex; align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            background: #f9f9f9;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+        .comp-btn:hover { background: #f0f0f0; border-color: #ccc; }
+        .comp-btn.active { background: #e8f4fd; border-color: #3498db; color: #2980b9; font-weight: bold; }
+        .comp-icon { width: 24px; height: 24px; margin-right: 10px; background: #ddd; border-radius: 4px; }
+        
+        /* Toggles */
+        .toggle-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .toggle-btn {
+            flex: 1; padding: 8px; font-size: 12px;
+            border: 1px solid #ccc; background: white;
+            border-radius: 4px; cursor: pointer;
+            text-align: center;
+        }
+        .toggle-btn.active { background: #2c3e50; color: white; border-color: #2c3e50; }
+        
+        /* Stats Box */
+        #stats-box {
+            margin-top: auto;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            font-size: 12px;
+        }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px dashed #eee; padding-bottom: 2px; }
+        .stat-val { font-family: 'Consolas', monospace; font-weight: bold; color: #2c3e50; }
+        
+        /* Action Button */
+        #btn-snapshot {
+            margin-top: 20px;
+            padding: 15px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: background 0.2s;
+        }
+        #btn-snapshot:hover { background: #219150; }
+
+        /* Canvas Area */
+        #canvas-container { flex: 1; position: relative; background: #e0e5ec; }
+        
+        #overlay-tip {
+            position: absolute; bottom: 20px; right: 20px;
+            background: rgba(255,255,255,0.8);
+            padding: 8px 15px; border-radius: 20px;
+            font-size: 11px; color: #555; pointer-events: none;
+            border: 1px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+    </style>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="layout">
+        <div id="sidebar">
+            <h1>Component Lab</h1>
+            <h2>Project Duck Season: Spear Mk.II</h2>
+            
+            <div class="section-label">Pick A Part</div>
+            <button class="comp-btn active" data-comp="shaft" onclick="loadComponent('shaft')">
+                <div class="comp-icon" style="background:#8B4513"></div> 1. Long Stick
+            </button>
+            <button class="comp-btn" data-comp="grip" onclick="loadComponent('grip')">
+                <div class="comp-icon" style="background:#333"></div> 2. Sticky Bit
+            </button>
+            <button class="comp-btn" data-comp="head" onclick="loadComponent('head')">
+                <div class="comp-icon" style="background:#000"></div> 3. Pointy End
+            </button>
+            <button class="comp-btn" data-comp="fin" onclick="loadComponent('fin')">
+                <div class="comp-icon" style="background:#D2B48C"></div> 4. Flippy Thing
+            </button>
+            <button class="comp-btn" data-comp="all" onclick="loadComponent('all')">
+                <div class="comp-icon" style="background:linear-gradient(135deg, #8B4513 0%, #333 50%, #000 100%)"></div> 5. The Whole Shebang
+            </button>
+            
+            <div class="section-label">Make It Look Cool</div>
+            <div class="toggle-row">
+                <button id="mode-real" class="toggle-btn active" onclick="setRenderMode('real')">Real Life</button>
+                <button id="mode-blue" class="toggle-btn" onclick="setRenderMode('blue')">Sci-Fi Mode</button>
+            </div>
+            <button id="btn-dims" class="toggle-btn" style="width:100%" onclick="toggleDimensions()">Add Math Numbers</button>
+            
+            <div id="stats-box">
+                <div style="font-weight:bold; margin-bottom:10px; color:#555">Nerd Stats</div>
+                <div class="stat-row"><span>Heaviness:</span> <span class="stat-val" id="val-mass">--</span></div>
+                <div class="stat-row"><span>Space Taken:</span> <span class="stat-val" id="val-vol">--</span></div>
+                <div class="stat-row"><span>Thickness:</span> <span class="stat-val" id="val-den">--</span></div>
+                <div class="stat-row"><span>Made Of:</span> <span class="stat-val" id="val-mat">--</span></div>
+            </div>
+            
+            <button id="btn-snapshot" onclick="takeSnapshot()">📸 Keep Picture</button>
+        </div>
+        
+        <div id="canvas-container">
+            <div id="overlay-tip">Left Click: Spin • Right Click: Slide • Scroll: Zoom</div>
+        </div>
+    </div>
+
+<script>
+    // the important numbers and stuff
+    const CONFIG = {
+        shaft: { 
+            mass: "807.51 g", vol: "950.02 cm³", den: "0.85 g/cm³", mat: "Tree Material",
+            dims: { L: 2.1, R: 0.012 },
+            camPos: [0, 0.5, 1.5]
+        },
+        grip: { 
+            mass: "531.84 g", vol: "279.92 cm³", den: "1.9 g/cm³", mat: "Squishy Stuff",
+            dims: { L: 1.1, R_out: 0.015, R_in: 0.012 },
+            camPos: [0, 0.3, 0.8]
+        },
+        head: { 
+            mass: "40.00 g", vol: "13.33 cm³", den: "3.0 g/cm³", mat: "Shiny Rock",
+            dims: { H: 0.10, Base: "1cm x 4cm" },
+            camPos: [0.1, 0.1, 0.2]
+        },
+        fin: { 
+            mass: "0.81 g", vol: "0.96 cm³", den: "0.85 g/cm³", mat: "Tree Material",
+            dims: { Scale: 0.06, Thickness: "2mm" },
+            camPos: [0.1, 0.1, 0.2]
+        },
+        all: {
+            mass: "1380.17 g", vol: "1244.22 cm³", den: "Mixed Bag", mat: "Everything",
+            dims: { L: "2.2m Total" },
+            camPos: [1.1, 0.5, 2.0]
+        }
+    };
+
+    let state = {
+        component: 'shaft',
+        mode: 'real', // 'real' or 'blue'
+        showDims: false
+    };
+
+    // 3d setup (boring part)
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xe0e5ec); // Neutral studio grey
+
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
+    
+    // preserveDrawingBuffer needed to save images
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // lights camera action
+    const ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambLight);
+    
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    keyLight.position.set(5, 5, 5);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048; 
+    keyLight.shadow.mapSize.height = 2048;
+    scene.add(keyLight);
+    
+    const rimLight = new THREE.DirectionalLight(0xddeeff, 0.6);
+    rimLight.position.set(-5, 2, -5);
+    scene.add(rimLight);
+
+    // making things look like things
+    const MATS = {
+        wood: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, name: 'real' }),
+        rubber: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1, name: 'real' }),
+        obsidian: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.05, metalness: 0.8, name: 'real' }),
+        blueprintSolid: new THREE.MeshBasicMaterial({ color: 0xeef5ff, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, name: 'blue' }),
+        lineColor: 0x0055bb
+    };
+
+    // buckets for the parts
+    const activeGroup = new THREE.Group();
+    scene.add(activeGroup);
+    const dimGroup = new THREE.Group();
+    scene.add(dimGroup);
+
+    // shape maker 3000
+    
+    // making it look expensive
+    function createShaft() {
+        // A long tube
+        const geo = new THREE.CylinderGeometry(0.012, 0.012, 2.1, 32);
+        geo.rotateZ(Math.PI/2); 
+        return new THREE.Mesh(geo, MATS.wood.clone());
+    }
+
+    function createGrip() {
+        // A tube with a hole in it
+        const shape = new THREE.Shape();
+        shape.absarc(0, 0, 0.015, 0, Math.PI * 2, false);
+        const holePath = new THREE.Path();
+        holePath.absarc(0, 0, 0.012, 0, Math.PI * 2, true);
+        shape.holes.push(holePath);
+        
+        const settings = { steps: 1, depth: 1.1, bevelEnabled: false, curveSegments: 32 };
+        const geo = new THREE.ExtrudeGeometry(shape, settings);
+        geo.center(); 
+        geo.rotateY(Math.PI/2); 
+        return new THREE.Mesh(geo, MATS.rubber.clone());
+    }
+
+    function createHead() {
+        // The sharp bit
+        const headGeo = new THREE.BufferGeometry();
+        const v_tip=[0.1,0,0], v_bl=[0,-0.005,-0.02], v_br=[0,0.005,-0.02], v_tr=[0,0.005,0.02], v_tl=[0,-0.005,0.02];
+        const verts = new Float32Array([...v_bl,...v_br,...v_tr, ...v_bl,...v_tr,...v_tl, ...v_tip,...v_br,...v_bl, ...v_tip,...v_tr,...v_br, ...v_tip,...v_tl,...v_tr, ...v_tip,...v_bl,...v_tl]);
+        headGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+        headGeo.computeVertexNormals();
+        
+        const mesh = new THREE.Mesh(headGeo, MATS.obsidian.clone());
+        // Rotate 90 degrees around X (Shaft axis) to flip blade
+        mesh.rotateX(-Math.PI/2); 
+        return mesh;
+    }
+
+    function createFin() {
+        // The flippy bit
+        const finShape = new THREE.Shape();
+        const steps=40; const max_t=1.195; const scale=0.06;
+        finShape.moveTo(5*scale, 0);
+        for(let i=1; i<=steps; i++){ let t=(i/steps)*max_t; finShape.lineTo((5-t*t)*scale, t*scale); }
+        for(let i=steps; i>=0; i--){ let t=(i/steps)*max_t; finShape.lineTo((4-0.3*t*t)*scale, t*scale); }
+        
+        const finGeo = new THREE.ExtrudeGeometry(finShape, { steps:1, depth:0.002, bevelEnabled:false });
+        finGeo.translate(0,0,-0.001); 
+        return new THREE.Mesh(finGeo, MATS.wood.clone());
+    }
+
+    // drawing lines on top of lines
+
+    function addBlueprintLines(mesh, type) {
+        // Smart Line Generation based on component Type
+        // Removes dense tesselation lines, keeps structural lines
+        
+        if (type === 'shaft') {
+            const lineGeo = new THREE.CylinderGeometry(0.012, 0.012, 2.1, 8, 1);
+            lineGeo.rotateZ(Math.PI/2);
+            const edges = new THREE.EdgesGeometry(lineGeo); // 8 clean lines
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: MATS.lineColor }));
+            mesh.add(line);
+        } 
+        else if (type === 'grip') {
+            const outerGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.1, 8, 1);
+            outerGeo.rotateZ(Math.PI/2);
+            
+            const innerGeo = new THREE.CylinderGeometry(0.012, 0.012, 1.1, 8, 1);
+            innerGeo.rotateZ(Math.PI/2);
+            
+            const edgesOut = new THREE.EdgesGeometry(outerGeo);
+            const edgesIn = new THREE.EdgesGeometry(innerGeo);
+            
+            mesh.add(new THREE.LineSegments(edgesOut, new THREE.LineBasicMaterial({ color: MATS.lineColor })));
+            mesh.add(new THREE.LineSegments(edgesIn, new THREE.LineBasicMaterial({ color: MATS.lineColor, transparent:true, opacity:0.4 })));
+        }
+        else {
+            const edges = new THREE.EdgesGeometry(mesh.geometry, 15);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: MATS.lineColor }));
+            mesh.add(line);
+        }
+    }
+
+    function createLabel(text, pos) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256; canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = "rgba(0, 85, 187, 0.9)"; 
+        ctx.fillRect(0,0,256,64);
+        ctx.fillStyle = "white";
+        ctx.font = "bold 24px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, 128, 32);
+        
+        const tex = new THREE.CanvasTexture(canvas);
+        const mat = new THREE.SpriteMaterial({ map: tex });
+        const sprite = new THREE.Sprite(mat);
+        sprite.position.copy(pos);
+        sprite.scale.set(0.1, 0.025, 1);
+        return sprite;
+    }
+    
+    function createLine(p1, p2) {
+        const pts = [p1, p2];
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        return new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x0055bb }));
+    }
+
+    function addDims(type) {
+        dimGroup.clear();
+        if(type === 'shaft') {
+            dimGroup.add(createLabel("L = 210cm", new THREE.Vector3(0, 0.05, 0)));
+            dimGroup.add(createLabel("r = 1.2cm", new THREE.Vector3(-1.05, 0.05, 0)));
+            dimGroup.add(createLine(new THREE.Vector3(-1.05, 0.02, 0), new THREE.Vector3(1.05, 0.02, 0)));
+        } else if(type === 'grip') {
+            dimGroup.add(createLabel("L = 110cm", new THREE.Vector3(0, 0.06, 0)));
+            dimGroup.add(createLabel("Thk = 0.3cm", new THREE.Vector3(0.55, 0.03, 0)));
+            dimGroup.add(createLine(new THREE.Vector3(-0.55, 0.03, 0), new THREE.Vector3(0.55, 0.03, 0)));
+        } else if(type === 'head') {
+            dimGroup.add(createLabel("H = 10cm", new THREE.Vector3(0.05, 0.04, 0)));
+            dimGroup.add(createLabel("W = 4cm", new THREE.Vector3(0, -0.02, 0.03)));
+            dimGroup.add(createLabel("Thk = 1cm", new THREE.Vector3(0, -0.02, -0.03)));
+        } else if(type === 'fin') {
+            dimGroup.add(createLabel("Math: x=185-6(y-1.2)²", new THREE.Vector3(0.15, 0.08, 0)));
+            dimGroup.add(createLabel("Thk = 0.2cm", new THREE.Vector3(0.15, -0.02, 0)));
+        } else if(type === 'all') {
+            dimGroup.add(createLabel("Total Mass = 1380g", new THREE.Vector3(1.05, 0.2, 0)));
+            dimGroup.add(createLabel("Total Length = 220cm", new THREE.Vector3(1.05, -0.2, 0)));
+            dimGroup.add(createLine(new THREE.Vector3(0, -0.15, 0), new THREE.Vector3(2.2, -0.15, 0)));
+        }
+    }
+
+    // do the thing
+    
+    window.loadComponent = function(name) {
+        state.component = name;
+        
+        document.querySelectorAll('.comp-btn').forEach(b => {
+            if (b.dataset.comp === name) {
+                b.classList.add('active');
+            } else {
+                b.classList.remove('active');
+            }
+        });
+        
+        const d = CONFIG[name];
+        document.getElementById('val-mass').innerText = d.mass;
+        document.getElementById('val-vol').innerText = d.vol;
+        document.getElementById('val-den').innerText = d.den;
+        document.getElementById('val-mat').innerText = d.mat;
+        
+        activeGroup.clear();
+        
+        if (name === 'all') {
+            const s = createShaft();
+            s.position.set(1.05, 0, 0);
+            s.userData.type = 'shaft';
+            activeGroup.add(s);
+            
+            const g = createGrip();
+            g.position.set(0.55, 0, 0);
+            g.userData.type = 'grip';
+            activeGroup.add(g);
+            
+            const h = createHead();
+            h.position.set(2.1, 0, 0);
+            h.userData.type = 'head';
+            activeGroup.add(h);
+            
+            const f = createFin();
+            f.position.set(1.85 - 0.27, 0.012, 0); 
+            f.userData.type = 'fin';
+            activeGroup.add(f);
+            
+        } else {
+            let mesh;
+            if(name==='shaft') mesh = createShaft();
+            if(name==='grip') mesh = createGrip();
+            if(name==='head') mesh = createHead();
+            if(name==='fin') mesh = createFin();
+            mesh.userData.type = name;
+            activeGroup.add(mesh);
+        }
+        
+        const pos = CONFIG[name].camPos;
+        camera.position.set(pos[0], pos[1], pos[2]);
+        if (name === 'all') controls.target.set(1.1, 0, 0);
+        else controls.target.set(0,0,0);
+        controls.update();
+        
+        if(state.showDims) addDims(name);
+        else dimGroup.clear();
+        
+        setRenderMode(state.mode);
+    };
+
+    window.setRenderMode = function(mode) {
+        state.mode = mode;
+        document.getElementById('mode-real').classList.toggle('active', mode==='real');
+        document.getElementById('mode-blue').classList.toggle('active', mode==='blue');
+        
+        activeGroup.children.forEach(mesh => {
+            // Clear old lines
+            for (let i = mesh.children.length - 1; i >= 0; i--) {
+                if (mesh.children[i].type === 'LineSegments') {
+                    mesh.remove(mesh.children[i]);
+                }
+            }
+            
+            if(mode === 'real') {
+                scene.background = new THREE.Color(0xe0e5ec);
+                const type = mesh.userData.type || state.component;
+                
+                if(type === 'shaft') mesh.material = MATS.wood;
+                if(type === 'grip') mesh.material = MATS.rubber;
+                if(type === 'head') mesh.material = MATS.obsidian;
+                if(type === 'fin') mesh.material = MATS.wood;
+            } else {
+                scene.background = new THREE.Color(0xffffff); 
+                mesh.material = MATS.blueprintSolid;
+                addBlueprintLines(mesh, mesh.userData.type || state.component);
+            }
+        });
+    };
+
+    window.toggleDimensions = function() {
+        state.showDims = !state.showDims;
+        document.getElementById('btn-dims').classList.toggle('active', state.showDims);
+        if(state.showDims) addDims(state.component);
+        else dimGroup.clear();
+    };
+
+    window.takeSnapshot = function() {
+        renderer.render(scene, camera);
+        const url = renderer.domElement.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `spear_component_${state.component}_${state.mode}.png`;
+        link.href = url;
+        link.click();
+    };
+
+    loadComponent('shaft');
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w/h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+    });
+
+</script>
+</body>
+</html>

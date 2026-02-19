@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spear Wobbly Sim</title>
+    <style>
+        /* CSS is my passion. Okay maybe not. Bruh */
+        body { margin: 0; overflow: hidden; background-color: #f0f2f5; font-family: 'Comic Sans MS', 'Segoe UI', sans-serif; color: #333; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        
+        /* Dashboard Overlay */
+        #dashboard {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 340px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            border: 1px solid #ddd;
+        }
+        
+        h1 { margin: 0 0 15px 0; font-size: 20px; color: #0055bb; text-transform: uppercase; border-bottom: 2px solid #0055bb; padding-bottom: 10px; }
+        
+        .control-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 13px; color: #555; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        
+        /* Checkbox Style */
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            background: #f1f3f5;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border: 1px solid #e9ecef;
+        }
+        .checkbox-group input { margin-right: 10px; width: auto; cursor: pointer; }
+        .checkbox-group label { margin: 0; cursor: pointer; }
+
+        .math-box {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+        }
+        
+        .math-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .math-label { color: #666; }
+        .math-val { font-weight: bold; }
+        .good { color: #28a745; }
+        .bad { color: #dc3545; }
+        .total { font-size: 14px; border-top: 1px solid #ccc; padding-top: 4px; margin-top: 4px; }
+        
+        .status-indicator {
+            text-align: center;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 10px;
+            transition: all 0.2s;
+        }
+        
+        .legend { font-size: 11px; color: #777; margin-top: 10px; line-height: 1.4; }
+        .legend span { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 50%; }
+
+        /* Button Styles */
+        .btn-action {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 5px;
+            font-size: 13px;
+        }
+        #btn-throw { background: #28a745; color: white; box-shadow: 0 4px 6px rgba(40, 167, 69, 0.2); }
+        #btn-throw:hover { background: #218838; }
+        #btn-reset { background: #6c757d; color: white; display: none; }
+        #btn-reset:hover { background: #5a6268; }
+
+    </style>
+    <!-- Load Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="dashboard">
+        <h1>Basically Magic</h1>
+        
+        <div class="control-group">
+            <label>How Crooked is it? (<span id="angle-display">5</span>°)</label>
+            <input type="range" id="angle-slider" min="-25" max="25" value="5" step="1">
+            <div style="font-size: 11px; color: #888; margin-top: 4px;">Drag to break physics.</div>
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="chk-gusts">
+            <label for="chk-gusts">Turn on Wind (Chaos Mode)</label>
+        </div>
+
+        <button id="btn-throw" class="btn-action">YEET THE SPEAR</button>
+        <button id="btn-reset" class="btn-action">TRY AGAIN</button>
+
+        <div class="math-box" style="margin-top: 15px;">
+            <div class="math-row">
+                <span class="math-label">Pivot Point (CoM):</span>
+                <span class="math-val">0.935 m</span>
+            </div>
+            <hr style="border: 0; border-top: 1px solid #ddd; margin: 8px 0;">
+            
+            <!-- Fin Math -->
+            <div class="math-row" style="color:#0055bb; font-weight:bold;">Fin (The Fixer)</div>
+            <div class="math-row">
+                <span class="math-label">Lever Arm:</span>
+                <span class="math-val">0.92 m</span>
+            </div>
+            <div class="math-row">
+                <span class="math-label">Torque:</span>
+                <span class="math-val good" id="fin-torque">--</span>
+            </div>
+            
+            <hr style="border: 0; border-top: 1px dashed #ddd; margin: 8px 0;">
+            
+            <!-- Tip Math -->
+            <div class="math-row" style="color:#d63384; font-weight:bold;">Tip (The Problem)</div>
+            <div class="math-row">
+                <span class="math-label">Lever Arm:</span>
+                <span class="math-val">1.21 m</span>
+            </div>
+            <div class="math-row">
+                <span class="math-label">Torque:</span>
+                <span class="math-val bad" id="tip-torque">--</span>
+            </div>
+            
+            <div class="math-row total">
+                <span class="math-label">NET TWISTYNESS:</span>
+                <span class="math-val" id="net-torque">--</span>
+            </div>
+        </div>
+
+        <div id="status-box" class="status-indicator">DOING OK</div>
+
+        <div class="legend">
+            <div><span style="background:cyan;"></span>Pivot (Spinny Spot)</div>
+            <div><span style="background:#0055bb;"></span>Fin Push (Good)</div>
+            <div><span style="background:#d63384;"></span>Tip Push (Bad)</div>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+<script>
+    // setup stuffs
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf0f2f5);
+    scene.fog = new THREE.Fog(0xf0f2f5, 5, 20);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 100);
+    camera.position.set(0.935, 3, 0); // Top-down view initially
+    camera.lookAt(0.935, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0.935, 0, 0);
+    controls.enableDamping = true;
+
+    // let there be light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 10, 5);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    const gridHelper = new THREE.GridHelper(10, 10, 0xbbbbbb, 0xdddddd);
+    scene.add(gridHelper);
+
+    // the stick parts
+    // Materials
+    const matWood = new THREE.MeshStandardMaterial({ color: 0x8B4513, transparent: true, opacity: 0.8 });
+    const matRubber = new THREE.MeshStandardMaterial({ color: 0x222222, transparent: true, opacity: 0.8 });
+    const matObsidian = new THREE.MeshStandardMaterial({ color: 0x111111, transparent: true, opacity: 0.9 });
+    
+    // Group
+    const spearAnchor = new THREE.Group(); // This rotates
+    spearAnchor.position.set(0.935, 0, 0); // Pivot at CoM
+    scene.add(spearAnchor);
+    
+    const spearMeshGroup = new THREE.Group(); // This holds the mesh, offset relative to anchor
+    spearMeshGroup.position.set(-0.935, 0, 0); // Shift back so 0.935 is at anchor
+    spearAnchor.add(spearMeshGroup);
+
+    // Shaft
+    const shaftGeo = new THREE.CylinderGeometry(0.012, 0.012, 2.1, 32);
+    shaftGeo.rotateZ(-Math.PI / 2);
+    shaftGeo.translate(1.05, 0, 0);
+    const shaft = new THREE.Mesh(shaftGeo, matWood);
+    spearMeshGroup.add(shaft);
+
+    // Grip
+    const gripGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.1, 32);
+    gripGeo.rotateZ(-Math.PI / 2);
+    gripGeo.translate(0.55, 0, 0);
+    const grip = new THREE.Mesh(gripGeo, matRubber);
+    spearMeshGroup.add(grip);
+
+    // Head (Tip)
+    const headGeo = new THREE.BufferGeometry();
+    const v_tip = [2.2, 0, 0];
+    const v_bl = [2.1, -0.005, -0.02];
+    const v_br = [2.1,  0.005, -0.02];
+    const v_tr = [2.1,  0.005,  0.02];
+    const v_tl = [2.1, -0.005,  0.02];
+    const vertices = new Float32Array([
+        ...v_bl, ...v_br, ...v_tr, ...v_bl, ...v_tr, ...v_tl,
+        ...v_tip, ...v_br, ...v_bl, ...v_tip, ...v_tr, ...v_br,
+        ...v_tip, ...v_tl, ...v_tr, ...v_tip, ...v_bl, ...v_tl
+    ]);
+    headGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    headGeo.computeVertexNormals();
+    const head = new THREE.Mesh(headGeo, matObsidian);
+    spearMeshGroup.add(head);
+
+    // Fin
+    const finShape = new THREE.Shape();
+    const steps = 20; const max_t = 1.195; const scale = 0.06;
+    finShape.moveTo(5 * scale, 0 * scale);
+    for(let i=1; i<=steps; i++){
+        let t = (i/steps) * max_t; finShape.lineTo((5 - t*t)*scale, t*scale);
+    }
+    for(let i=steps; i>=0; i--){
+        let t = (i/steps) * max_t; finShape.lineTo((4 - 0.3*t*t)*scale, t*scale);
+    }
+    const finGeo = new THREE.ExtrudeGeometry(finShape, { steps: 1, depth: 0.002, bevelEnabled: false });
+    finGeo.translate(0, 0, -0.001);
+    finGeo.translate((1.85 - 0.27), 0.011, 0);
+    const fin = new THREE.Mesh(finGeo, matWood);
+    spearMeshGroup.add(fin);
+
+    // drawing physics
+    
+    // Pivot Marker
+    const pivotGeo = new THREE.SphereGeometry(0.04, 32, 32);
+    const pivotMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const pivotMarker = new THREE.Mesh(pivotGeo, pivotMat);
+    // Pivot is at 0,0,0 of the spearAnchor group
+    spearAnchor.add(pivotMarker);
+    
+    const finForceOrigin = new THREE.Vector3(1.85 - 0.935, 0, 0); // Local to anchor
+    const tipForceOrigin = new THREE.Vector3(2.15 - 0.935, 0, 0); // Local to anchor
+    
+    // We visualize forces perpendicular to the spear axis (simplified lift/normal force)
+    const arrowDir = new THREE.Vector3(0, 0, 1); 
+    
+    const finArrow = new THREE.ArrowHelper(arrowDir, finForceOrigin, 1, 0x0055bb, 0.1, 0.05);
+    const tipArrow = new THREE.ArrowHelper(arrowDir, tipForceOrigin, 0.5, 0xd63384, 0.1, 0.05);
+    
+    // Add arrows to Anchor so they rotate with spear
+    spearAnchor.add(finArrow);
+    spearAnchor.add(tipArrow);
+    
+    // Wind Streamlines (Static background)
+    const linesGroup = new THREE.Group();
+    scene.add(linesGroup);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.3 });
+    for(let z=-1; z<=1; z+=0.2) {
+        const points = [];
+        points.push(new THREE.Vector3(-1, 0, z));
+        points.push(new THREE.Vector3(3, 0, z));
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geo, lineMat);
+        linesGroup.add(line);
+    }
+
+    
+    const slider = document.getElementById('angle-slider');
+    const angleDisplay = document.getElementById('angle-display');
+    const btnThrow = document.getElementById('btn-throw');
+    const btnReset = document.getElementById('btn-reset');
+    const chkGusts = document.getElementById('chk-gusts');
+    
+    // Math Elements
+    const elFinTorque = document.getElementById('fin-torque');
+    const elTipTorque = document.getElementById('tip-torque');
+    const elNet = document.getElementById('net-torque');
+    const elStatus = document.getElementById('status-box');
+
+    // Approximate Coefficients
+    const AREA_FIN = 20; 
+    const AREA_TIP = 4;
+    const ARM_FIN = 0.92;
+    const ARM_TIP = 1.21;
+    const MOMENT_OF_INERTIA = 0.375; 
+    const DAMPING = 0.98; // Air friction
+    const WINDY_BOI_POWER = 0.8; // Random torque magnitude
+
+    let isSimulating = false;
+    let angularVelocity = 0; 
+    let currentAngle = 5;
+
+    function do_ui_updates(angleDeg, tFin, tTip, tNet) {
+        angleDisplay.innerText = angleDeg.toFixed(1);
+        
+        // 1. Rotate Spear visually
+        spearAnchor.rotation.y = THREE.MathUtils.degToRad(-angleDeg);
+        
+        // 2. Update Arrow Visuals
+        const forceFin = Math.abs(tFin / ARM_FIN);
+        const forceTip = Math.abs(tTip / ARM_TIP);
+        
+        // If angle is Positive (Nose Left), Fin pushes Left (Neg Z), Tip pushes Left (Neg Z)
+        // Arrow Helper direction:
+        // Let's assume Z+ is "Right".
+        // If angle > 0 (Nose Left), wind hits Right side. Force pushes Left (Z-).
+        const dir = angleDeg >= 0 ? -1 : 1;
+        
+        finArrow.setLength(Math.max(0.001, forceFin * 0.1)); 
+        finArrow.setDirection(new THREE.Vector3(0, 0, dir)); 
+        
+        tipArrow.setLength(Math.max(0.001, forceTip * 0.1));
+        tipArrow.setDirection(new THREE.Vector3(0, 0, dir)); 
+        
+        // 3. Update Text with SIGNED values
+        // Fin Torque opposes angle. If angle > 0, T_fin < 0.
+        elFinTorque.innerText = (tFin > 0 ? "+" : "") + tFin.toFixed(1) + " Nm";
+        elTipTorque.innerText = (tTip > 0 ? "+" : "") + tTip.toFixed(1) + " Nm";
+        elNet.innerText = (tNet > 0 ? "+" : "") + tNet.toFixed(1) + " Nm";
+        
+        // 4. Status Check
+        // Stable if Net Torque opposes Angle
+        const opposing = (tNet > 0 && angleDeg < 0) || (tNet < 0 && angleDeg > 0);
+        
+        // Special case near zero
+        if (Math.abs(angleDeg) < 0.1) {
+             elStatus.innerText = "WE GOOD (0°)";
+             elStatus.style.background = "#e2e3e5";
+             elStatus.style.color = "#383d41";
+        } else if (opposing) {
+             elStatus.innerText = "IT'S WORKING (STABLE)";
+             elStatus.style.background = "#d4edda";
+             elStatus.style.color = "#155724";
+        } else {
+             elStatus.innerText = "PANIC! (UNSTABLE)";
+             elStatus.style.background = "#f8d7da";
+             elStatus.style.color = "#721c24";
+        }
+    }
+
+    function do_the_physics_thing(angleDeg) {
+        // Fin Force opposes angle
+        // Angle +5 (Left) -> Fin Force Pushes Left (Neg Torque)
+        const forceFin = Math.abs(angleDeg) * AREA_FIN * 0.1;
+        const torqueFin = -1 * Math.sign(angleDeg) * forceFin * ARM_FIN;
+        
+        // Tip Force assists angle
+        // Angle +5 (Left) -> Tip Force Pushes Left (Pos Torque, increasing angle)
+        const forceTip = Math.abs(angleDeg) * AREA_TIP * 0.1;
+        const torqueTip = Math.sign(angleDeg) * forceTip * ARM_TIP;
+        
+        return { torqueFin, torqueTip, netTorque: torqueFin + torqueTip };
+    }
+
+    // Button Logic
+    btnThrow.addEventListener('click', () => {
+        isSimulating = true;
+        angularVelocity = 0;
+        currentAngle = parseFloat(slider.value);
+        slider.disabled = true;
+        btnThrow.style.display = 'none';
+        btnReset.style.display = 'block';
+    });
+
+    btnReset.addEventListener('click', () => {
+        isSimulating = false;
+        angularVelocity = 0;
+        currentAngle = 5;
+        slider.value = 5;
+        slider.disabled = false;
+        btnThrow.style.display = 'block';
+        btnReset.style.display = 'none';
+        
+        // Reset view
+        const vals = do_the_physics_thing(5);
+        do_ui_updates(5, vals.torqueFin, vals.torqueTip, vals.netTorque);
+    });
+
+    slider.addEventListener('input', () => {
+        const val = parseFloat(slider.value);
+        const vals = do_the_physics_thing(val);
+        do_ui_updates(val, vals.torqueFin, vals.torqueTip, vals.netTorque);
+    });
+
+    // Animation Loop
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        if (isSimulating) {
+            // 1. Calculate Standard Torques
+            const phys = do_the_physics_thing(currentAngle);
+            let netT = phys.netTorque;
+            
+            // 2. Add Gustiness (Random Perturbation)
+            if (chkGusts.checked) {
+                // Random kick between -GUST and +GUST
+                const gust = (Math.random() - 0.5) * 2 * WINDY_BOI_POWER;
+                netT += gust;
+            }
+
+            // 3. Integration Step
+            const acc = netT / MOMENT_OF_INERTIA;
+            angularVelocity += acc * (1/60); 
+            angularVelocity *= DAMPING; 
+            currentAngle += angularVelocity;
+            
+            // 4. Update UI
+            // We pass the instantaneous netT (including gust) to the UI
+            do_ui_updates(currentAngle, phys.torqueFin, phys.torqueTip, netT);
+            
+            // Update slider to follow simulation
+            slider.value = currentAngle;
+        }
+        
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    
+    // Init
+    const initVals = do_the_physics_thing(5);
+    do_ui_updates(5, initVals.torqueFin, initVals.torqueTip, initVals.netTorque);
+    animate();
+
+</script>
+</body>
+</html>

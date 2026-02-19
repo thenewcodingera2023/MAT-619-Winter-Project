@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pointy Stick of Destiny</title>
+    <style>
+        /* if it works, don't touch it */
+        body { margin: 0; background-color: #f0f2f5; font-family: 'Comic Sans MS', 'Segoe UI', sans-serif; color: #333; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Layout: Box on top of box */
+        #main-container { display: flex; flex: 1; position: relative; overflow: hidden; }
+        #canvas-container { flex: 1; background: #ddd; position: relative; }
+        
+        /* The buttons and stuff */
+        #dashboard {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15); /* fancy shadow */
+            border: 1px solid #ddd;
+            z-index: 10;
+        }
+        
+        h1 { margin: 0 0 15px 0; font-size: 18px; color: #0055bb; text-transform: uppercase; border-bottom: 2px solid #0055bb; padding-bottom: 10px; }
+        
+        select { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-weight: bold; margin-bottom: 15px; cursor: pointer; }
+        
+        .btn-action {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 10px;
+            font-size: 12px;
+            background: #28a745; color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .btn-action:hover { background: #218838; }
+        .btn-action:disabled { background: #ccc; cursor: not-allowed; }
+
+        .status-badge {
+            text-align: center;
+            padding: 8px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-top: 10px;
+            background: #e9ecef; color: #555;
+        }
+
+        /* The little pictures at the bottom */
+        #storyboard-strip {
+            height: 220px;
+            background: #fff;
+            border-top: 1px solid #ccc;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+            overflow-x: auto; /* scrolly scroll */
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.05);
+        }
+        
+        .frame-card {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            width: 250px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .frame-card img {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            border: 1px solid #eee;
+            background: #f0f2f5;
+            border-radius: 4px;
+        }
+        .caption {
+            font-size: 12px;
+            color: #555;
+            margin-top: 8px;
+            font-weight: 600;
+        }
+        .timestamp {
+            font-size: 10px;
+            color: #999;
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        #overlay-msg {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%); /* centering hacks */
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 50px;
+            font-size: 24px;
+            font-weight: bold;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 20;
+        }
+
+    </style>
+    <!-- Load Three.js (3D magic library) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="main-container">
+        <div id="dashboard">
+            <h1>The 'Will It Fly?' Machine</h1>
+            <label style="font-size: 12px; font-weight: bold; color: #555;">Choose Your Disaster:</label>
+            <select id="scenario-select">
+                <option value="stable">1. Just Good Enough (Stable)</option>
+                <option value="gust">2. It's Windy (Turbulence)</option>
+                <option value="unstable">3. Oops, I Broke It (Unstable)</option>
+            </select>
+
+            <button id="btn-run" class="btn-action">Do The Science Thing</button>
+            
+            <div id="status-display" class="status-badge">WAITING FOR INPUT</div>
+            
+            <div style="font-size: 11px; color: #888; margin-top: 15px; line-height: 1.4;">
+                *Does math automatically<br>
+                *Takes 3 pictures<br>
+                *Proves I did the work
+            </div>
+        </div>
+        
+        <div id="overlay-msg">DOING MATH...</div>
+        <div id="canvas-container"></div>
+    </div>
+
+    <div id="storyboard-strip">
+        <div style="color: #ccc; font-style: italic;">Push the green button to make science happen...</div>
+    </div>
+
+<script>
+    // setup code (yawn)
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf0f2f5);
+    scene.fog = new THREE.Fog(0xf0f2f5, 5, 20);
+
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
+    camera.position.set(0.935, 3.5, 0); 
+    camera.lookAt(0.935, 0, 0);
+
+    // IMPORTANT: used to take screenshots
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0.935, 0, 0);
+    controls.enableDamping = true;
+
+    // putting stuff in the scene
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 10, 5);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    const gridHelper = new THREE.GridHelper(10, 10, 0xbbbbbb, 0xdddddd);
+    scene.add(gridHelper);
+
+    // Spear Group
+    const spearAnchor = new THREE.Group();
+    spearAnchor.position.set(0.935, 0, 0);
+    scene.add(spearAnchor);
+    
+    // The actual stick parts
+    const pointy_stick_group = new THREE.Group();
+    pointy_stick_group.position.set(-0.935, 0, 0);
+    spearAnchor.add(pointy_stick_group);
+
+    // Materials (colors)
+    const matWood = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+    const matRubber = new THREE.MeshStandardMaterial({ color: 0x222222 });
+    const matObsidian = new THREE.MeshStandardMaterial({ color: 0x111111 });
+
+    // Build Spear
+    // CylinderGeometry(radiusTop, radiusBottom, height, radialSegments)
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 2.1, 32).rotateZ(-Math.PI/2).translate(1.05,0,0), matWood);
+    pointy_stick_group.add(shaft);
+    
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.1, 32).rotateZ(-Math.PI/2).translate(0.55,0,0), matRubber);
+    pointy_stick_group.add(grip);
+    
+    // The pointy end
+    const headGeo = new THREE.BufferGeometry();
+    const v_tip=[2.2,0,0], v_bl=[2.1,-0.005,-0.02], v_br=[2.1,0.005,-0.02], v_tr=[2.1,0.005,0.02], v_tl=[2.1,-0.005,0.02];
+    // manual mesh because why not
+    const verts = new Float32Array([...v_bl,...v_br,...v_tr, ...v_bl,...v_tr,...v_tl, ...v_tip,...v_br,...v_bl, ...v_tip,...v_tr,...v_br, ...v_tip,...v_tl,...v_tr, ...v_tip,...v_bl,...v_tl]);
+    headGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    headGeo.computeVertexNormals();
+    pointy_stick_group.add(new THREE.Mesh(headGeo, matObsidian));
+
+    // Fin (The thing that keeps it straight)
+    const finGroup = new THREE.Group();
+    pointy_stick_group.add(finGroup);
+    
+    function make_fin(scaleFactor) {
+        // Delete old fin
+        while(finGroup.children.length > 0){ 
+            finGroup.remove(finGroup.children[0]); 
+        }
+        
+        const finShape = new THREE.Shape();
+        const steps=20; const max_t=1.195; const scale=0.06 * scaleFactor; // Scale factor for broken fin
+        finShape.moveTo(5*scale, 0);
+        // Drawing curve by connecting dots
+        for(let i=1; i<=steps; i++){ let t=(i/steps)*max_t; finShape.lineTo((5-t*t)*scale, t*scale); }
+        for(let i=steps; i>=0; i--){ let t=(i/steps)*max_t; finShape.lineTo((4-0.3*t*t)*scale, t*scale); }
+        
+        const finGeo = new THREE.ExtrudeGeometry(finShape, { steps:1, depth:0.002, bevelEnabled:false });
+        finGeo.translate(0,0,-0.001);
+        finGeo.translate((1.85-0.27), 0.011, 0); // Put it on the back
+        finGroup.add(new THREE.Mesh(finGeo, matWood));
+    }
+    make_fin(1.0); // Start with a good fin
+
+    // Force Arrows (because vectors are cool)
+    const arrowDir = new THREE.Vector3(0,0,1);
+    const finArrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(1.85-0.935,0,0), 1, 0x0055bb, 0.1, 0.05);
+    const tipArrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(2.15-0.935,0,0), 0.5, 0xd63384, 0.1, 0.05);
+    spearAnchor.add(finArrow);
+    spearAnchor.add(tipArrow);
+    
+    // Pivot Dot
+    spearAnchor.add(new THREE.Mesh(new THREE.SphereGeometry(0.04), new THREE.MeshBasicMaterial({color:0x00ffff})));
+
+    // magic numbers defined here
+    const ARM_FIN = 0.92;
+    const ARM_TIP = 1.21;
+    const INERTIA = 0.375;
+    const DAMPING = 0.96;
+    
+    // State stuff
+    let angle = 0;
+    let velocity = 0;
+    let isRunning = false;
+    let frameCount = 0;
+    
+    // Scenario Config
+    let currentScenario = 'stable';
+    let config = {
+        areaFin: 20,
+        areaTip: 4,
+        gusts: false,
+        initAngle: 15
+    };
+
+    // where the magic happens
+    
+    function reset_and_pray(scenario) {
+        currentScenario = scenario;
+        isRunning = false;
+        frameCount = 0;
+        velocity = 0;
+        
+        if (scenario === 'stable') {
+            config = { areaFin: 20, areaTip: 4, gusts: false, initAngle: 15 };
+            make_fin(1.0);
+            document.getElementById('status-display').innerText = "MODE: IT WORKS";
+            document.getElementById('status-display').style.background = "#d4edda";
+            document.getElementById('status-display').style.color = "#155724";
+        } else if (scenario === 'gust') {
+            config = { areaFin: 20, areaTip: 4, gusts: true, initAngle: 0 };
+            make_fin(1.0);
+            document.getElementById('status-display').innerText = "MODE: BUMPY RIDE";
+            document.getElementById('status-display').style.background = "#fff3cd";
+            document.getElementById('status-display').style.color = "#856404";
+        } else if (scenario === 'unstable') {
+            // Damaged Fin: sad fin
+            config = { areaFin: 3, areaTip: 4, gusts: false, initAngle: 5 };
+            make_fin(0.4); // shrunk fin
+            document.getElementById('status-display').innerText = "MODE: OH NO (BROKEN)";
+            document.getElementById('status-display').style.background = "#f8d7da";
+            document.getElementById('status-display').style.color = "#721c24";
+        }
+        
+        angle = config.initAngle;
+        make_it_look_cool();
+    }
+
+    function make_it_look_cool() {
+        spearAnchor.rotation.y = THREE.MathUtils.degToRad(-angle);
+        
+        // Scale arrows based on force
+        const forceFin = Math.abs(angle) * config.areaFin * 0.1;
+        const forceTip = Math.abs(angle) * config.areaTip * 0.1;
+        const dir = angle >= 0 ? -1 : 1;
+        
+        finArrow.setLength(Math.max(0.001, forceFin * 0.1));
+        finArrow.setDirection(new THREE.Vector3(0,0,dir));
+        tipArrow.setLength(Math.max(0.001, forceTip * 0.1));
+        tipArrow.setDirection(new THREE.Vector3(0,0,dir));
+    }
+
+    function do_physics_step() {
+        // Torque Calc
+        const fFin = Math.abs(angle) * config.areaFin * 0.1;
+        const fTip = Math.abs(angle) * config.areaTip * 0.1;
+        
+        // This is where the magic happens
+        // Fin pushes back (Good) -> Restoring
+        const tFin = -1 * Math.sign(angle) * fFin * ARM_FIN;
+        // Tip pushes away (Bad) -> Upsetting
+        const tTip = Math.sign(angle) * fTip * ARM_TIP;
+        
+        let netT = tFin + tTip;
+        
+        // Gusts
+        if (config.gusts) {
+            // Random invisible foot kicking the spear
+            if (Math.random() > 0.9) {
+                netT += (Math.random() - 0.5) * 5; 
+            }
+        }
+        
+        // Integrate (Calculus? In my browser?)
+        velocity += (netT / INERTIA) * (1/60);
+        velocity *= DAMPING; // friction basically
+        angle += velocity;
+        
+        make_it_look_cool();
+    }
+
+    // taking pictures automatically
+    
+    function snap_pic(caption, timeLabel) {
+        renderer.render(scene, camera); // Cheese!
+        const dataURL = renderer.domElement.toDataURL('image/png');
+        
+        const card = document.createElement('div');
+        card.className = 'frame-card';
+        card.innerHTML = `
+            <span class="timestamp">${timeLabel}</span>
+            <img src="${dataURL}" />
+            <div class="caption">${caption}</div>
+        `;
+        return card;
+    }
+
+    async function start_the_show() {
+        const sel = document.getElementById('scenario-select').value;
+        const strip = document.getElementById('storyboard-strip');
+        const btn = document.getElementById('btn-run');
+        const overlay = document.getElementById('overlay-msg');
+        
+        btn.disabled = true;
+        strip.innerHTML = '';
+        overlay.style.opacity = 1;
+        
+        reset_and_pray(sel);
+        
+        // When to take selfies
+        let captures = [];
+        
+        if (sel === 'stable') {
+            captures = [
+                { f: 0, t: "t=0s (Start)", c: "Offset: 15°. Blue arrow means 'Go Back!'" },
+                { f: 40, t: "t=0.7s (Swing)", c: "Spear swings back. Too fast!" },
+                { f: 120, t: "t=2.0s (Chill)", c: "Oscillation stops. We good." }
+            ];
+        } else if (sel === 'gust') {
+            captures = [
+                { f: 0, t: "t=0s (Calm)", c: "Flying straight. Life is good." },
+                { f: 45, t: "t=0.8s (BAM)", c: "Wind hit it. Angle weird." },
+                { f: 90, t: "t=1.5s (Fixed)", c: "Fin fixed it. Good fin." }
+            ];
+            // Prime gusts to happen specifically for visual
+            config.gusts = false; // We will manually inject a gust
+        } else if (sel === 'unstable') {
+            captures = [
+                { f: 0, t: "t=0s (Start)", c: "Small offset (5°). Tiny fin is trying." },
+                { f: 60, t: "t=1.0s (Uh oh)", c: "Pink torque wins. Angle getting worse." },
+                { f: 120, t: "t=2.0s (Ded)", c: "Spear is sideways. Mission failed." }
+            ];
+        }
+
+        // Run Loop
+        const maxFrames = 150;
+        
+        for (let i = 0; i <= maxFrames; i++) {
+            // Kick it
+            if (sel === 'gust' && i === 30) {
+                velocity += 2.0; // KAPOW
+            }
+            
+            do_physics_step();
+            
+            // Selfie time?
+            const cap = captures.find(c => c.f === i);
+            if (cap) {
+                const card = snap_pic(cap.c, cap.t);
+                strip.appendChild(card);
+            }
+            
+            // Wait a tiny bit so user sees it happen (60fps approx)
+            await new Promise(r => setTimeout(r, 16));
+            renderer.render(scene, camera);
+        }
+        
+        overlay.style.opacity = 0;
+        btn.disabled = false;
+    }
+
+    document.getElementById('btn-run').addEventListener('click', start_the_show);
+
+    // Initial Render
+    reset_and_pray('stable');
+    renderer.render(scene, camera);
+
+    // Resize Handler
+    window.addEventListener('resize', () => {
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w/h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+        renderer.render(scene, camera);
+    });
+
+</script>
+</body>
+</html>
